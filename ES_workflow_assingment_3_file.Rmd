@@ -1,0 +1,269 @@
+---
+title: "Es_Round_2_Assignment 4"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+
+```{r}
+library(sf)
+library(tidyverse)
+library(ggthemes)
+library(ggspatial)
+library(units)
+library(nngeo)
+```
+
+
+```{r load datasets}
+
+hotel <- st_read("https://geoportal.hawaii.gov/datasets/585d90bf45b842ebb93c75251721fd23_3.kml?outSR=%7B%22latestWkid%22%3A3760%2C%22wkid%22%3A102463%7D", quiet = TRUE)
+
+busroute <- st_read("https://geoportal.hawaii.gov/datasets/b2c358bd77fd4a2fbe7b79c729600d34_2.kml?outSR=%7B%22latestWkid%22%3A3760%2C%22wkid%22%3A102463%7D", quiet = TRUE)
+
+park <- st_read("https://geoportal.hawaii.gov/datasets/8741314267104512b9d50570dfecc99b_19.kml?outSR=%7B%22latestWkid%22%3A3760%2C%22wkid%22%3A102463%7D", quiet = TRUE) 
+
+zone <- st_read("https://geoportal.hawaii.gov/datasets/8068469b47834d3ca4bc299d4079f35f_5.kml?outSR=%7B%22latestWkid%22%3A3760%2C%22wkid%22%3A102463%7D", quiet = TRUE)
+
+nhoods <- st_read("https://geoportal.hawaii.gov/datasets/b44dfd8d6faa4eb193d177955375cedd_0.kml?outSR=%7B%22latestWkid%22%3A3760%2C%22wkid%22%3A102463%7D", quiet = TRUE)
+
+```
+
+
+```{R coordinate system}
+HI_plane <- "+proj=tmerc +lat_0=18.83333333333333 +lon_0=-155.5 +k=0.999966667 +x_0=500000 +y_0=0 +ellps=GRS80 +units=m +no_defs"
+
+hotel <- hotel %>% st_transform(HI_plane)
+busroute <- busroute %>% st_transform(HI_plane)
+park <- park %>% st_transform(HI_plane)
+zone <- zone %>% st_transform(HI_plane)
+nhoods <- nhoods %>% st_transform(HI_plane)
+```
+
+
+```{r prepare basemap}
+
+ggplot() +
+
+  geom_sf(data = hotel, color = "green", fill = "green", size = 5) +
+  geom_sf(data = busroute, color = "blue", fill = "NA", size=0.01) +
+  theme_map() + annotation_scale()
+
+```
+
+
+```{r locate hotels}
+
+busroute_buffer <- st_buffer(busroute, dist = 100) %>% st_union()
+hotel_busroute <- hotel[busroute_buffer,]
+
+hotel <- hotel %>%
+  st_join(hotel_busroute) %>%
+  mutate(by_busroute = !is.na(Name.y))
+
+```
+
+```{r number of hotels around bus}
+
+n_busroute_hotel <- sum(hotel$by_busroute)
+n_busroute_hotel
+
+```
+```{r percent}
+
+n_hotel <- length(hotel$by_busroute)
+pct_busroute_hotel <- n_busroute_hotel / n_hotel
+pct_busroute_hotel
+
+```
+
+```{R map to show}
+left_side  <- st_bbox(hotel)$xmin
+top_side <- st_bbox(hotel)$ymax
+
+ggplot() +
+  geom_sf(data = hotel, size = 5, aes(color = by_busroute)) +
+  scale_color_manual(values = c("darkred", "darkgreen"),
+          name = "Hotels\n by distance to a bus routes", 
+          labels = c("No bus route near 100 m",
+                     "Bus route within 100 m")) +
+  annotation_scale(location = "br") +
+  annotation_north_arrow(location = "tr",
+                         style = north_arrow_minimal()) +
+  annotate(geom = "text", x = left_side, 
+           y = top_side, 
+           label = paste("Of the ", 
+                         prettyNum(n_hotel, big.mark = ","),
+                         " hotels in O'ahu\n", 
+                         prettyNum(n_busroute_hotel, big.mark = ","),
+                         " (", 
+                         prettyNum(100*pct_busroute_hotel, digits = 0),
+                         "%) are within 100\nmeters of a bus route.",
+                         sep = ""),
+           hjust = -1, vjust = 1, size = 3) +
+  theme_map() +
+  theme(panel.background = element_rect(fill = "cornsilk1"),
+        legend.background = element_rect(fill = alpha("white", 0.5), 
+                                         color = "gray"))
+```
+
+Ellie Version of map: comparing bus routes to parks
+
+```{r basemap comparison}
+ggplot() +
+
+  geom_sf(data = park, color = "green", fill = "green", size = 1) +
+  geom_sf(data = busroute, color = "blue", fill = "NA", size=0.01) +
+  theme_map() + annotation_scale()
+```
+
+
+```{r }
+busroute_buffer <- st_buffer(busroute, dist = 300) %>% 
+  st_union()
+
+
+ggplot(busroute_buffer) +
+  geom_sf() +
+  theme_map()
+
+```
+
+``` {r subset points}
+
+park_busroute <- park[busroute_buffer,]
+  
+ggplot(busroute_buffer) +
+  geom_sf() +
+  geom_sf(data = park_busroute, 
+          color = "darkgreen", 
+          size = 0.01) +
+  theme_map() + annotation_scale()
+```
+
+```{r join}
+park_busroute <- park[busroute_buffer,]
+
+park <- park %>%
+  st_join(park_busroute) %>%
+  mutate(by_busroute = !is.na(Description.y))
+
+```
+
+```{r number of parks}
+
+n_park_busroute <- sum(park$by_busroute)
+n_park_busroute
+```
+```{r % of parks by busroute}
+
+n_parkl <- length(park$by_busroute)
+
+pct_park_busroute <- n_park_busroute / 550
+
+pct_park_busroute
+
+```
+
+```{r final map}
+left_side  <- st_bbox(park)$xmin
+top_side <- st_bbox(park)$ymax
+
+ggplot() +
+  geom_sf(data = park, size = 3, aes(color = by_busroute)) +
+  scale_color_manual(values = c("mediumorchid", "palegreen3"),
+          name = "Parks\n by distance to a bus routes", 
+          labels = c("No bus route near 300 m",
+                     "Bus route within 300 m")) +
+  annotation_scale(location = "br") +
+  annotation_north_arrow(location = "tr",
+                         style = north_arrow_orienteering()) +
+  annotate(geom = "text", x = left_side, 
+           y = top_side, 
+           label = paste("Of the ", 
+                         prettyNum(550, big.mark = ","),
+                         " parks in O'ahu\n", 
+                         prettyNum(n_park_busroute, big.mark = ","),
+                         " (", 
+                         prettyNum(100*pct_park_busroute, digits = 0),
+                         "%) are within 300\nmeters of a bus route.",
+                         sep = ""),
+           hjust = 0, vjust = 1, size = 3) +
+  theme_map() +
+  theme(panel.background = element_rect(fill = "azure2"),
+        legend.background = element_rect(fill = alpha("white", 0.5), 
+                                         color = "gray"))
+```
+```{r hotels with neighorhoods }
+
+nhoods <- nhoods %>%
+  mutate(num_hotel = lengths(st_covers(nhoods, hotel)))
+
+ggplot(nhoods) +
+  geom_sf(aes(fill = num_hotel), color = NA) +
+  scale_fill_viridis_c(name = "Oahu neighborhoods\nby number of hotels",
+                       breaks = breaks <- seq(0, 100, by = 20),
+                       labels = paste(prettyNum(breaks, big.mark = ","),
+                                      "hotels")) +
+  annotation_scale(location = "br") +
+  annotation_north_arrow(location = "tr",
+                         style = north_arrow_orienteering()) +
+theme_map() +
+  theme(legend.background = element_rect(fill = alpha("white", 0.5), 
+                                         color = "gray")) 
+```
+
+```{r parks with neighborhoods}
+
+
+nhoods <- nhoods %>%
+  mutate(num_park = lengths(st_covers(nhoods, hotel)))
+
+ggplot(nhoods) +
+
+  geom_sf(aes(fill = num_park), color = NA) +
+  scale_fill_viridis_c(name = "Oahu neighborhoods\nby number of parks",
+                       breaks = breaks <- seq(0, 80, by = 20),
+                       labels = paste(prettyNum(breaks, big.mark = ","),
+                                      "parks")) +
+  annotation_scale(location = "br") +
+  annotation_north_arrow(location = "tr",
+                         style = north_arrow_fancy_orienteering()) +
+theme_map() +
+  theme(legend.background = element_rect(fill = alpha("white", 0.5), 
+                                         color = "gray"))
+```
+
+```{r find closest point}
+
+hotel <- hotel %>%
+  mutate(hotel_dist = st_nn(hotel, park, 
+                           returnDist = TRUE)$dist) %>%
+  mutate(park_dist = as.numeric(park_dist))
+```
+
+
+`

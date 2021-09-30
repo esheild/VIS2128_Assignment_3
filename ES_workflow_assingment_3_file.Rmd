@@ -257,7 +257,7 @@ theme_map() +
                                          color = "gray"))
 ```
 
-```{r find closest point}
+```{ find closest point}
 
 hotel <- hotel %>%
   mutate(hotel_dist = st_nn(hotel, park, 
